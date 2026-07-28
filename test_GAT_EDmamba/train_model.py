@@ -10,6 +10,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from test_GAT_EDmamba import *
+from test_GAT_EDmamba.AsymmetricLoss import AdaptiveAsymmetricMSELoss
 from utils import *
 # 自动创建 logs 文件夹（不存在就新建）
 default_log_dir = os.path.join(PROJECT_ROOT, "logs")
@@ -60,7 +61,7 @@ if __name__ == '__main__':
     parser.add_argument('--mamba-hidden-dim', type=int, default=16, help='Hidden size of encoder/decoder Mamba blocks')
     parser.add_argument('--no-cuda', action='store_true', default=False, help='disables CUDA training')
     parser.add_argument('--mamba-num-layers', type=int, default=2, help='Number of Mamba layers before LSTM encoder')
-    parser.add_argument('--mamba-d-state', type=int, default=16, help='Hidden size of Mamba layers before LSTM encoder')
+    parser.add_argument('--mamba-d-state', type=int, default=10, help='Hidden size of Mamba layers before LSTM encoder')
     parser.add_argument('--save-model', dest='save_model', action='store_true', default=True,
                         help='save trained models')
     parser.add_argument('--no-save-model', dest='save_model', action='store_false',
@@ -71,6 +72,16 @@ if __name__ == '__main__':
                         help='Override training seeds, e.g. --seed-list 62 80 88 97')
     parser.add_argument('--start-seed', type=int, default=None,
                         help='Start from this seed within the active seed list')
+    parser.add_argument('--asym-alpha', type=float, default=2.0,
+                        help='Penalty strength for overestimated RUL predictions')
+    parser.add_argument('--asym-gamma', type=float, default=5.0,
+                        help='Weight boost for low-RUL focus samples')
+    parser.add_argument('--asym-delta', type=float, default=0.9,
+                        help='Weight multiplier for healthy high-RUL cap samples')
+    parser.add_argument('--focus-threshold', type=float, default=35.0,
+                        help='RUL threshold below which samples receive focus weighting')
+    parser.add_argument('--cap-threshold', type=float, default=125.0,
+                        help='RUL threshold above which healthy samples are down-weighted')
     args = parser.parse_args()
 
     model_code = str(args.model_code).strip()
@@ -127,7 +138,14 @@ if __name__ == '__main__':
 
         model_type = type(model).__name__
 
-        criterion_train = torch.nn.MSELoss()
+        criterion_train = AdaptiveAsymmetricMSELoss(
+            alpha=args.asym_alpha,
+            gamma=args.asym_gamma,
+            delta=args.asym_delta,
+            focus_threshold=args.focus_threshold,
+            cap_threshold=args.cap_threshold,
+            max_rul=args.max_rul,
+        )
         criterion_eval = RMSELoss()
         optimizer = torch.optim.RMSprop(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         scheduler = torch.optim.lr_scheduler.StepLR(
@@ -171,6 +189,12 @@ if __name__ == '__main__':
             f.write(f"encoder_hidden_size: {encoder_hidden_size}\n")
             f.write(f"mamba_num_layers: {mamba_num_layers}\n")
             f.write(f"mamba_d_state: {mamba_d_state}\n")
+            f.write("训练损失: AdaptiveAsymmetricMSELoss\n")
+            f.write(f"asym_alpha: {args.asym_alpha}\n")
+            f.write(f"asym_gamma: {args.asym_gamma}\n")
+            f.write(f"asym_delta: {args.asym_delta}\n")
+            f.write(f"focus_threshold: {args.focus_threshold}\n")
+            f.write(f"cap_threshold: {args.cap_threshold}\n")
             f.write("------------------------------\n")
 
 

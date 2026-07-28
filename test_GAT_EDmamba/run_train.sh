@@ -16,16 +16,17 @@ print("CUDA available:", torch.cuda.get_device_name(0))
 PY
 
 # Fixed seed plan (as requested).
-SEEDS=(2 17 27 30 33 51 62 80 88 97)
+SEEDS=(51 62 80 88 97)
 # 2 17 27 30 33 51 62 80 88 97
-DATASETS=(FD001 FD002 FD003)
+DATASETS=(FD003)
 # FD002 FD003 FD004
-sequence_len=(30 40 50 60)
+sequence_len=(30)
 
 MAX_EPOCHS="${MAX_EPOCHS:-30}"
-MODEL_CODE="${MODEL_CODE:-GAT_EDmamba}"
+MODEL_CODE="${MODEL_CODE:-GAT_EDmamba_asym}"
 BATCH_SIZE="${BATCH_SIZE:-128}"
 LR="${LR:-0.002}"
+
 
 for DATASET in "${DATASETS[@]}"; do
   for SEQ_LEN in "${sequence_len[@]}"; do
@@ -34,6 +35,31 @@ for DATASET in "${DATASETS[@]}"; do
       SMOOTH_RATE=30
     else
       SMOOTH_RATE=40
+    fi  
+    if [ "$DATASET" == "FD001" ]; then
+      alpha=1.5
+      gamma=2.0
+      delta=0.9
+      focus_threshold=35.0
+      cap_threshold=125.0
+    elif [ "$DATASET" == "FD002" ]; then
+      alpha=3.0
+      gamma=5.0
+      delta=0.9
+      focus_threshold=35.0
+      cap_threshold=125.0
+    elif [ "$DATASET" == "FD003" ]; then
+      alpha=3.5
+      gamma=5.0
+      delta=0.9
+      focus_threshold=35.0
+      cap_threshold=125.0
+    elif [ "$DATASET" == "FD004" ]; then
+      alpha=2.0
+      gamma=5.0
+      delta=0.9
+      focus_threshold=35.0
+      cap_threshold=125.0
     fi
 
     echo "====================================="
@@ -49,7 +75,12 @@ for DATASET in "${DATASETS[@]}"; do
       --lr "$LR" \
       --smooth-rate "$SMOOTH_RATE" \
       --seed-list "${SEEDS[@]}" \
-      --model-code "$MODEL_CODE"+"$SEQ_LEN"
+      --model-code "$MODEL_CODE"+"$SEQ_LEN" \
+      --asym-alpha "$alpha" \
+      --asym-gamma "$gamma" \
+      --asym-delta "$delta" \
+      --focus-threshold "$focus_threshold" \
+      --cap-threshold "$cap_threshold"
   done
 done
 
