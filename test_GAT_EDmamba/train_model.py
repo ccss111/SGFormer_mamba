@@ -58,10 +58,10 @@ if __name__ == '__main__':
     parser.add_argument('--smooth-rate', type=int, default=40)
     parser.add_argument('--use-spatial-gat', action='store_true', default=True, help='Whether to use spatial GAT')
     parser.add_argument('--gat-hidden-dim', type=int, default=8, help='Hidden size of GAT blocks')
-    parser.add_argument('--mamba-hidden-dim', type=int, default=16, help='Hidden size of encoder/decoder Mamba blocks')
+    parser.add_argument('--mamba-d-model', type=int, default=10, help='input/output size of encoder/decoder Mamba blocks')
     parser.add_argument('--no-cuda', action='store_true', default=False, help='disables CUDA training')
-    parser.add_argument('--mamba-num-layers', type=int, default=2, help='Number of Mamba layers before LSTM encoder')
-    parser.add_argument('--mamba-d-state', type=int, default=10, help='Hidden size of Mamba layers before LSTM encoder')
+    parser.add_argument('--mamba-num-layers', type=int, default=2, help='Number of Mamba layers')
+    parser.add_argument('--mamba-d-state', type=int, default=16, help='Hidden size of Mamba layers')
     parser.add_argument('--save-model', dest='save_model', action='store_true', default=True,
                         help='save trained models')
     parser.add_argument('--no-save-model', dest='save_model', action='store_false',
@@ -89,8 +89,8 @@ if __name__ == '__main__':
         raise ValueError("--model-code cannot be empty.")
 
     ablation_preset_info = None
-    encoder_hidden_size = args.mamba_hidden_dim
-    mamba_num_layers = 2
+    encoder_hidden_size = args.mamba_d_model
+    mamba_num_layers = args.mamba_num_layers
     mamba_d_state = args.mamba_d_state
 
     run_output_root = os.path.join(default_log_dir, f"{args.sub_dataset}_{model_code}")
@@ -123,13 +123,13 @@ if __name__ == '__main__':
         encoder_input_size = args.feature_num
         encoder = Seq2SeqEncoder(
             input_size=encoder_input_size,
-            num_layers=2,
+            num_layers=mamba_num_layers,
             num_hidden=encoder_hidden_size,
             d_state=mamba_d_state,
         )
         decoder = Seq2SeqDecoder(
             input_size=encoder_hidden_size,
-            num_layers=2,
+            num_layers=mamba_num_layers,
             num_hidden=encoder_hidden_size,
             d_state=mamba_d_state,
         )
