@@ -11,10 +11,22 @@ class AdaptiveAsymmetricMSELoss(nn.Module):
     target RUL to the original scale with max_rul.
     """
 
-    def __init__(self, alpha=2.0, gamma=5.0, delta=0.9, focus_threshold=35.0, cap_threshold=125.0, max_rul=125.0):
+    def __init__(self, sub_dataset, alpha=2.0, gamma=5.0, delta=0.9, focus_threshold=35.0, cap_threshold=125.0, max_rul=125.0):
         super().__init__()
         if delta < 0:
             raise ValueError("delta must be non-negative.")
+        if sub_dataset == "FD001":
+            alpha = 1.5
+            gamma = 2.0
+        elif sub_dataset == "FD002":
+            alpha = 3.0
+            gamma = 5.0
+        elif sub_dataset == "FD003":
+            alpha = 3.5
+            gamma = 5.0
+        elif sub_dataset == "FD004":
+            alpha = 2.0
+            gamma = 5.0
         self.alpha = float(alpha)
         self.gamma = float(gamma)
         self.delta = float(delta)

@@ -72,16 +72,16 @@ if __name__ == '__main__':
                         help='Override training seeds, e.g. --seed-list 62 80 88 97')
     parser.add_argument('--start-seed', type=int, default=None,
                         help='Start from this seed within the active seed list')
-    parser.add_argument('--asym-alpha', type=float, default=2.0,
-                        help='Penalty strength for overestimated RUL predictions')
-    parser.add_argument('--asym-gamma', type=float, default=5.0,
-                        help='Weight boost for low-RUL focus samples')
-    parser.add_argument('--asym-delta', type=float, default=0.9,
-                        help='Weight multiplier for healthy high-RUL cap samples')
-    parser.add_argument('--focus-threshold', type=float, default=35.0,
-                        help='RUL threshold below which samples receive focus weighting')
-    parser.add_argument('--cap-threshold', type=float, default=125.0,
-                        help='RUL threshold above which healthy samples are down-weighted')
+    parser.add_argument('--asym-alpha', type=float, default=None,
+                        help='Override penalty strength for overestimated RUL predictions')
+    parser.add_argument('--asym-gamma', type=float, default=None,
+                        help='Override weight boost for low-RUL focus samples')
+    parser.add_argument('--asym-delta', type=float, default=None,
+                        help='Override weight multiplier for healthy high-RUL cap samples')
+    parser.add_argument('--focus-threshold', type=float, default=None,
+                        help='Override RUL threshold below which samples receive focus weighting')
+    parser.add_argument('--cap-threshold', type=float, default=None,
+                        help='Override RUL threshold above which healthy samples are down-weighted')
     args = parser.parse_args()
 
     model_code = str(args.model_code).strip()
@@ -89,9 +89,6 @@ if __name__ == '__main__':
         raise ValueError("--model-code cannot be empty.")
 
     ablation_preset_info = None
-    encoder_hidden_size = args.mamba_d_model
-    mamba_num_layers = args.mamba_num_layers
-    mamba_d_state = args.mamba_d_state
 
     run_output_root = os.path.join(default_log_dir, f"{args.sub_dataset}_{model_code}")
     os.makedirs(run_output_root, exist_ok=True)
@@ -123,22 +120,27 @@ if __name__ == '__main__':
         encoder_input_size = args.feature_num
         encoder = Seq2SeqEncoder(
             input_size=encoder_input_size,
-            num_layers=mamba_num_layers,
-            num_hidden=encoder_hidden_size,
-            d_state=mamba_d_state,
+            mamba_num_layers=args.mamba_num_layers,
+            mamba_d_model=args.mamba_d_model,
+            mamba_d_state=args.mamba_d_state,
         )
         decoder = Seq2SeqDecoder(
-            input_size=encoder_hidden_size,
-            num_layers=mamba_num_layers,
-            num_hidden=encoder_hidden_size,
-            d_state=mamba_d_state,
+            input_size=args.mamba_d_model,
+            mamba_num_layers=args.mamba_num_layers,
+            mamba_d_model=args.mamba_d_model,
+            mamba_d_state=args.mamba_d_state,
         )
-        model = EncoderDecoder(encoder=encoder, decoder=decoder, use_spatial_gat=args.use_spatial_gat, gat_hidden_dim=args.gat_hidden_dim, mamba_num_layers=2, mamba_d_state=mamba_d_state)
-        
+        model = EncoderDecoder(
+            encoder=encoder,
+            decoder=decoder,
+            use_spatial_gat=args.use_spatial_gat,
+            gat_hidden_dim=args.gat_hidden_dim,
+        )
 
         model_type = type(model).__name__
 
         criterion_train = AdaptiveAsymmetricMSELoss(
+            dataset=args.sub_dataset,
             alpha=args.asym_alpha,
             gamma=args.asym_gamma,
             delta=args.asym_delta,
@@ -162,8 +164,8 @@ if __name__ == '__main__':
         log_file_name = _build_log_name(
             model_code=model_code,
             lr=args.lr,
-            embed_dim=encoder_hidden_size,
-            topk=mamba_d_state,
+            embed_dim=args.mamba_d_model,
+            topk=args.mamba_d_state,
             time_tag=run_tag,
         )
         log_path = os.path.join(seed_output_dir, log_file_name)
@@ -186,17 +188,17 @@ if __name__ == '__main__':
             f.write(f"gat_hidden_dim: {args.gat_hidden_dim}\n")
             f.write("编码器: 2层Mamba\n")
             f.write("解码器: 2层Mamba\n")
-            f.write(f"encoder_hidden_size: {encoder_hidden_size}\n")
-            f.write(f"mamba_num_layers: {mamba_num_layers}\n")
-            f.write(f"mamba_d_state: {mamba_d_state}\n")
+            f.write(f"mamba_d_model: {args.mamba_d_model}\n")
+            f.write(f"mamba_num_layers: {args.mamba_num_layers}\n")
+            f.write(f"mamba_d_state: {args.mamba_d_state}\n")
             f.write("训练损失: AdaptiveAsymmetricMSELoss\n")
-            f.write(f"asym_alpha: {args.asym_alpha}\n")
-            f.write(f"asym_gamma: {args.asym_gamma}\n")
-            f.write(f"asym_delta: {args.asym_delta}\n")
-            f.write(f"focus_threshold: {args.focus_threshold}\n")
-            f.write(f"cap_threshold: {args.cap_threshold}\n")
+            f.write(f"asym_dataset: {args.sub_dataset}\n")
+            f.write(f"asym_alpha_override: {args.asym_alpha}\n")
+            f.write(f"asym_gamma_override: {args.asym_gamma}\n")
+            f.write(f"asym_delta_override: {args.asym_delta}\n")
+            f.write(f"focus_threshold_override: {args.focus_threshold}\n")
+            f.write(f"cap_threshold_override: {args.cap_threshold}\n")
             f.write("------------------------------\n")
-
 
         train(
             model, train_loader, valid_loader,

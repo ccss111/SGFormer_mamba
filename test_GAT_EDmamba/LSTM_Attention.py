@@ -5,29 +5,31 @@ import torch
 from torch import nn
 
 
-def _run_mamba_stack(x, blocks):
-    for block in blocks:
-        x = block(x)
-    return x
-
-
 class Seq2SeqEncoder(nn.Module):
-    def __init__(self, input_size, num_layers, num_hidden, d_state=16, dropout=0.1, d_conv=4, expand=2):
+    def __init__(self,
+                 input_size,
+                 mamba_num_layers,
+                 mamba_d_model,
+                 mamba_d_state=16,
+                 mamba_dropout=0.1,
+                 mamba_d_conv=4,
+                 mamba_expand=2):
         super(Seq2SeqEncoder, self).__init__()
         self.input_size = int(input_size)
-        self.hidden_size = int(num_hidden)
-        self.num_layers = int(num_layers)
-        self.output_size = self.hidden_size
+        self.mamba_d_model = int(mamba_d_model)
+        self.mamba_num_layers = int(mamba_num_layers)
+        self.output_size = self.mamba_d_model
+        self.hidden_size = self.mamba_d_model
         self.input_projection = None
         self.blocks = nn.ModuleList([
             MambaBlock(
-                d_model=self.hidden_size,
-                d_state=d_state,
-                dropout=dropout,
-                d_conv=d_conv,
-                expand=expand,
+                d_model=self.mamba_d_model,
+                d_state=mamba_d_state,
+                dropout=mamba_dropout,
+                d_conv=mamba_d_conv,
+                expand=mamba_expand,
             )
-            for _ in range(self.num_layers)
+            for _ in range(self.mamba_num_layers)
         ])
 
     def forward(self, x):
@@ -35,12 +37,14 @@ class Seq2SeqEncoder(nn.Module):
             input_size = int(x.size(-1))
             self.input_projection = (
                 nn.Identity()
-                if input_size == self.hidden_size
-                else nn.Linear(input_size, self.hidden_size)
+                if input_size == self.mamba_d_model
+                else nn.Linear(input_size, self.mamba_d_model)
             ).to(x.device)
         x = self.input_projection(x)
-        output = _run_mamba_stack(x, self.blocks)
-        hidden_state = output[:, -1, :].unsqueeze(0).repeat(self.num_layers, 1, 1)
+        output = x
+        for block in self.blocks:
+            output = block(output)
+        hidden_state = output[:, -1, :].unsqueeze(0).repeat(self.mamba_num_layers, 1, 1)
         cell_state = torch.zeros_like(hidden_state)
         return output, (hidden_state, cell_state)
 
@@ -68,40 +72,40 @@ class MambaBlock(nn.Module):
 class Seq2SeqDecoder(nn.Module):
     def __init__(self,
                  input_size,
-                 num_layers,
-                 num_hidden,
-                 seq_len=None,
-                 attention_size=None,
+                 mamba_num_layers,
+                 mamba_d_model,
                  use_aef=False,
-                 d_state=16,
-                 dropout=0.1,
-                 d_conv=4,
-                 expand=2):
+                 mamba_d_state=16,
+                 mamba_dropout=0.1,
+                 mamba_d_conv=4,
+                 mamba_expand=2):
         super(Seq2SeqDecoder, self).__init__()
         self.input_size = int(input_size)
-        self.hidden_size = int(num_hidden)
-        self.num_layers = int(num_layers)
+        self.mamba_d_model = int(mamba_d_model)
+        self.mamba_num_layers = int(mamba_num_layers)
         self.use_aef = bool(use_aef)
         self.input_projection = (
             nn.Identity()
-            if self.input_size == self.hidden_size
-            else nn.Linear(self.input_size, self.hidden_size)
+            if self.input_size == self.mamba_d_model
+            else nn.Linear(self.input_size, self.mamba_d_model)
         )
         self.blocks = nn.ModuleList([
             MambaBlock(
-                d_model=self.hidden_size,
-                d_state=d_state,
-                dropout=dropout,
-                d_conv=d_conv,
-                expand=expand,
+                d_model=mamba_d_model,
+                d_state=mamba_d_state,
+                dropout=mamba_dropout,
+                d_conv=mamba_d_conv,
+                expand=mamba_expand,
             )
-            for _ in range(self.num_layers)
+            for _ in range(self.mamba_num_layers)
         ])
-        self.Linear = nn.Linear(self.hidden_size, 1)
+        self.Linear = nn.Linear(self.mamba_d_model, 1)
 
     def forward(self, encoder_output, encoder_state):
         decoder_input = self.input_projection(encoder_output)
-        output = _run_mamba_stack(decoder_input, self.blocks)
+        output = decoder_input
+        for block in self.blocks:
+            output = block(output)
         output = self.Linear(output[:, -1, :])
         return output, None
 
@@ -120,9 +124,6 @@ class EncoderDecoder(nn.Module):
                  gat_topk=5,
                  gat_dropout=0.0,
                  gat_alpha=0.1,
-                 mamba_num_layers=2,
-                 mamba_d_state=16,
-                 mamba_dropout=0.1,
                  use_decoder=True):
         super(EncoderDecoder, self).__init__()
         self.encoder = encoder
@@ -130,9 +131,6 @@ class EncoderDecoder(nn.Module):
         self.use_spatial_gat = use_spatial_gat
         self.graph_mode = graph_mode
         self.use_decoder = bool(use_decoder)
-        self.mamba_num_layers = int(mamba_num_layers)
-        self.mamba_d_state = int(mamba_d_state)
-        self.mamba_dropout = float(mamba_dropout)
 
         if self.use_decoder and self.decoder is None:
             raise ValueError("decoder cannot be None when use_decoder=True")
@@ -166,37 +164,11 @@ class EncoderDecoder(nn.Module):
         else:
             self.encoder_regressor = None
 
-        self.mamba_input_projection = None
-        self.mamba_blocks = self._build_mamba_blocks(self.encoder_hidden_size)
-
-    def _build_mamba_blocks(self, d_model):
-        return nn.ModuleList(
-            [
-                MambaBlock(
-                    d_model=int(d_model),
-                    d_state=self.mamba_d_state,
-                    dropout=self.mamba_dropout,
-                )
-                for _ in range(self.mamba_num_layers)
-            ]
-        )
-
     def forward(self, encoder_x):
         use_decoder = bool(getattr(self, 'use_decoder', True))
 
         if self.use_spatial_gat:
             encoder_x = self.spatial_gat(encoder_x)
-
-        if self.mamba_input_projection is None:
-            input_size = int(encoder_x.size(-1))
-            self.mamba_input_projection = (
-                nn.Identity()
-                if input_size == self.encoder_hidden_size
-                else nn.Linear(input_size, self.encoder_hidden_size)
-            ).to(encoder_x.device)
-
-        encoder_x = self.mamba_input_projection(encoder_x)
-        encoder_x = _run_mamba_stack(encoder_x, self.mamba_blocks)
 
         encoder_output, encoder_state = self.encoder(encoder_x)
 
