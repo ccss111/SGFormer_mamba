@@ -16,9 +16,9 @@ print("CUDA available:", torch.cuda.get_device_name(0))
 PY
 
 # Fixed seed plan (as requested).
-SEEDS=(51 62 80 88 97)
+SEEDS=(2)
 # 2 17 27 30 33 51 62 80 88 97
-DATASETS=(FD003)
+DATASETS=(FD001)
 # FD002 FD003 FD004
 sequence_len=(30)
 

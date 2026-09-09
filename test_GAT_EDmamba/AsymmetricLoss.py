@@ -15,6 +15,7 @@ class AdaptiveAsymmetricMSELoss(nn.Module):
         super().__init__()
         if delta < 0:
             raise ValueError("delta must be non-negative.")
+        self.sub_dataset = sub_dataset
         if sub_dataset == "FD001":
             alpha = 1.5
             gamma = 2.0

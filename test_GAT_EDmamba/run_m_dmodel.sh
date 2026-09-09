@@ -18,13 +18,13 @@ PY
 # Fixed seed plan (as requested).
 SEEDS=(2 17 27 30 33 51 62 80 88 97)
 # 2 17 27 30 33 51 62 80 88 97
-DATASETS=(FD002)
+DATASETS=(FD001 FD003 )
 # FD002 FD003 FD004
 
-mamba_d_models=(12)
-# 4 6 8 10 16 32 64  
+mamba_d_models=(10)
+# 4 6 8 10 12 16 32 64  
 MAX_EPOCHS="${MAX_EPOCHS:-30}"
-MODEL_CODE="${MODEL_CODE:-GAT_EDmamba_dmodel}"
+MODEL_CODE="${MODEL_CODE:-GAT_EDmamba4_dmodel}"
 BATCH_SIZE="${BATCH_SIZE:-128}"
 LR="${LR:-0.002}"
 

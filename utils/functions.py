@@ -7,6 +7,8 @@ import os
 import time as time_module
 from contextlib import nullcontext
 
+from torch import nn
+
 
 def my_accuracy(true_rul, pred_rul):
     diff = (pred_rul - true_rul)
@@ -28,6 +30,31 @@ def compute_s_score(rul_true, rul_pred):
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+def _enable_dropout_only(module):
+    if isinstance(module, nn.Dropout):
+        module.train()
+
+
+def _mc_dropout_forward(model, x_batch, mc_samples, device, use_amp=False):
+    mc_samples = max(1, int(mc_samples))
+    model.eval()
+    model.apply(_enable_dropout_only)
+
+    autocast_ctx = nullcontext()
+    if use_amp and getattr(device, "type", str(device)) == "cuda":
+        autocast_ctx = torch.cuda.amp.autocast(dtype=torch.float16)
+
+    predictions = []
+    with torch.no_grad():
+        for _ in range(mc_samples):
+            with autocast_ctx:
+                y_pred, _ = model.forward(x_batch)
+            predictions.append(y_pred.detach().float())
+
+    stacked = torch.stack(predictions, dim=0)
+    return stacked.mean(dim=0)
 
 
 def testing_function(model, test_loader, loss_func,  max_rul, device):
@@ -224,7 +251,17 @@ def train(model_for_train, train_loader, valid_loader, test_loader, N_EPOCH, opt
     print(train_time_msg)
 
 
-def evaluate(model, num_test_windows, test_loader, max_rul, device, eval_batch_size: int = 32, use_amp: bool = False):
+def evaluate(
+    model,
+    num_test_windows,
+    test_loader,
+    max_rul,
+    device,
+    eval_batch_size: int = 32,
+    use_amp: bool = False,
+    mc_samples: int = 1,
+    use_mc_dropout: bool = False,
+):
     """Evaluate model on CMAPSS test set in a memory-safe way.
 
     Notes:
@@ -249,17 +286,26 @@ def evaluate(model, num_test_windows, test_loader, max_rul, device, eval_batch_s
     x_all = dataset.x_data
     y_all = dataset.y_data.reshape(-1) * max_rul
 
-    autocast_ctx = nullcontext()
-    if use_amp and getattr(device, "type", str(device)) == "cuda":
-        autocast_ctx = torch.cuda.amp.autocast(dtype=torch.float16)
-
     preds = []
     with torch.no_grad():
         for start in range(0, len(x_all), eval_batch_size):
             x_batch = x_all[start:start + eval_batch_size].to(device)
-            with autocast_ctx:
-                y_pred, _ = model.forward(x_batch)
-            preds.append(y_pred.detach().float().cpu())
+            if use_mc_dropout and mc_samples > 1:
+                y_pred = _mc_dropout_forward(
+                    model=model,
+                    x_batch=x_batch,
+                    mc_samples=mc_samples,
+                    device=device,
+                    use_amp=use_amp,
+                )
+            else:
+                autocast_ctx = nullcontext()
+                if use_amp and getattr(device, "type", str(device)) == "cuda":
+                    autocast_ctx = torch.cuda.amp.autocast(dtype=torch.float16)
+                with autocast_ctx:
+                    y_pred, _ = model.forward(x_batch)
+                y_pred = y_pred.detach().float()
+            preds.append(y_pred.cpu())
 
     rul_pred = torch.cat(preds, dim=0).reshape(-1) * max_rul
 

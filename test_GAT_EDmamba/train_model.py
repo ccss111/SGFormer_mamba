@@ -62,6 +62,7 @@ if __name__ == '__main__':
     parser.add_argument('--no-cuda', action='store_true', default=False, help='disables CUDA training')
     parser.add_argument('--mamba-num-layers', type=int, default=2, help='Number of Mamba layers')
     parser.add_argument('--mamba-d-state', type=int, default=16, help='Hidden size of Mamba layers')
+    parser.add_argument('--dropout', type=float, default=0.1, help='Dropout probability')
     parser.add_argument('--save-model', dest='save_model', action='store_true', default=True,
                         help='save trained models')
     parser.add_argument('--no-save-model', dest='save_model', action='store_false',
@@ -72,17 +73,20 @@ if __name__ == '__main__':
                         help='Override training seeds, e.g. --seed-list 62 80 88 97')
     parser.add_argument('--start-seed', type=int, default=None,
                         help='Start from this seed within the active seed list')
-    parser.add_argument('--asym-alpha', type=float, default=None,
-                        help='Override penalty strength for overestimated RUL predictions')
-    parser.add_argument('--asym-gamma', type=float, default=None,
-                        help='Override weight boost for low-RUL focus samples')
-    parser.add_argument('--asym-delta', type=float, default=None,
-                        help='Override weight multiplier for healthy high-RUL cap samples')
-    parser.add_argument('--focus-threshold', type=float, default=None,
-                        help='Override RUL threshold below which samples receive focus weighting')
-    parser.add_argument('--cap-threshold', type=float, default=None,
-                        help='Override RUL threshold above which healthy samples are down-weighted')
+    parser.add_argument('--asym-alpha', type=float, default=2.0,
+                        help='Penalty strength for overestimated RUL predictions')
+    parser.add_argument('--asym-gamma', type=float, default=5.0,
+                        help='Weight boost for low-RUL focus samples')
+    parser.add_argument('--asym-delta', type=float, default=0.9,
+                        help='Weight multiplier for healthy high-RUL cap samples')
+    parser.add_argument('--focus-threshold', type=float, default=35.0,
+                        help='RUL threshold below which samples receive focus weighting')
+    parser.add_argument('--cap-threshold', type=float, default=125.0,
+                        help='RUL threshold above which healthy samples are down-weighted')
     args = parser.parse_args()
+
+    if not 0.0 <= args.dropout <= 1.0:
+        raise ValueError('--dropout must be between 0.0 and 1.0.')
 
     model_code = str(args.model_code).strip()
     if not model_code:
@@ -123,16 +127,19 @@ if __name__ == '__main__':
             mamba_num_layers=args.mamba_num_layers,
             mamba_d_model=args.mamba_d_model,
             mamba_d_state=args.mamba_d_state,
+            mamba_dropout=args.dropout,
         )
         decoder = Seq2SeqDecoder(
             input_size=args.mamba_d_model,
             mamba_num_layers=args.mamba_num_layers,
             mamba_d_model=args.mamba_d_model,
             mamba_d_state=args.mamba_d_state,
+            mamba_dropout=args.dropout,
         )
         model = EncoderDecoder(
             encoder=encoder,
             decoder=decoder,
+            dropout=args.dropout,
             use_spatial_gat=args.use_spatial_gat,
             gat_hidden_dim=args.gat_hidden_dim,
         )
@@ -140,7 +147,7 @@ if __name__ == '__main__':
         model_type = type(model).__name__
 
         criterion_train = AdaptiveAsymmetricMSELoss(
-            dataset=args.sub_dataset,
+            sub_dataset=args.sub_dataset,
             alpha=args.asym_alpha,
             gamma=args.asym_gamma,
             delta=args.asym_delta,
@@ -180,6 +187,7 @@ if __name__ == '__main__':
             f.write(f"随机数种子: {num}\n")
             f.write(f"模型代号(model_code): {args.model_code}\n")
             f.write("模型结构(model_structure): mamba_mamba\n")
+            f.write(f"平滑率(smooth_rate): {args.smooth_rate}\n")
             f.write(f"学习率: {args.lr}\n")
             f.write("学习率调度器: step\n")
             f.write(f"Step步长(step_size): {args.step_size}\n")
@@ -191,13 +199,13 @@ if __name__ == '__main__':
             f.write(f"mamba_d_model: {args.mamba_d_model}\n")
             f.write(f"mamba_num_layers: {args.mamba_num_layers}\n")
             f.write(f"mamba_d_state: {args.mamba_d_state}\n")
+            f.write(f"dropout: {args.dropout}\n")
             f.write("训练损失: AdaptiveAsymmetricMSELoss\n")
-            f.write(f"asym_dataset: {args.sub_dataset}\n")
-            f.write(f"asym_alpha_override: {args.asym_alpha}\n")
-            f.write(f"asym_gamma_override: {args.asym_gamma}\n")
-            f.write(f"asym_delta_override: {args.asym_delta}\n")
-            f.write(f"focus_threshold_override: {args.focus_threshold}\n")
-            f.write(f"cap_threshold_override: {args.cap_threshold}\n")
+            f.write(f"asym_alpha: {args.asym_alpha}\n")
+            f.write(f"asym_gamma: {args.asym_gamma}\n")
+            f.write(f"asym_delta: {args.asym_delta}\n")
+            f.write(f"focus_threshold: {args.focus_threshold}\n")
+            f.write(f"cap_threshold: {args.cap_threshold}\n")
             f.write("------------------------------\n")
 
         train(

@@ -18,13 +18,13 @@ PY
 # Fixed seed plan (as requested).
 SEEDS=(2 17 27 30 33 51 62 80 88 97)
 # 2 17 27 30 33 51 62 80 88 97
-DATASETS=(FD002)
+DATASETS=(FD004)
 # FD002 FD003 FD004
 
-mamba_layers=(1 3)
+mamba_layers=(4)
 
 MAX_EPOCHS="${MAX_EPOCHS:-30}"
-MODEL_CODE="${MODEL_CODE:-GAT_EDmamba_layer}"
+MODEL_CODE="${MODEL_CODE:-GAT_EDmamba4_layer}"
 BATCH_SIZE="${BATCH_SIZE:-128}"
 LR="${LR:-0.002}"
 
@@ -44,7 +44,7 @@ for DATASET in "${DATASETS[@]}"; do
       focus_threshold=35.0
       cap_threshold=125.0
     elif [ "$DATASET" == "FD002" ]; then
-      mamba_d_model=16
+      mamba_d_model=10
       alpha=3.0
       gamma=5.0
       delta=0.9
@@ -58,6 +58,7 @@ for DATASET in "${DATASETS[@]}"; do
       focus_threshold=35.0
       cap_threshold=125.0
     elif [ "$DATASET" == "FD004" ]; then
+      mamba_d_model=10
       alpha=2.0
       gamma=5.0
       delta=0.9

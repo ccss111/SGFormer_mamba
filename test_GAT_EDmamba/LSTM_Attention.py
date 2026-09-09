@@ -122,7 +122,7 @@ class EncoderDecoder(nn.Module):
                  gat_num_layers=2,
                  gat_embed_dim=16,
                  gat_topk=5,
-                 gat_dropout=0.0,
+                 dropout=0.1,
                  gat_alpha=0.1,
                  use_decoder=True):
         super(EncoderDecoder, self).__init__()
@@ -145,7 +145,7 @@ class EncoderDecoder(nn.Module):
                 embed_dim=gat_embed_dim,
                 topk=gat_topk,
                 graph_mode=graph_mode,
-                dropout=gat_dropout,
+                dropout=dropout,
                 alpha=gat_alpha,
             )
         else:
